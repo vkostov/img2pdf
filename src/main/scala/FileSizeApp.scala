@@ -87,7 +87,7 @@ object FileSizeApp {
 
     system.eventStream.subscribe(dirWalkerRouter, classOf[CalculateSize])
 
-    sizeAggregator ! FileToProcess(new File("/Users/vkostov"))
+    sizeAggregator ! FileToProcess(new File("/Users/vkostov/projects"))
 
   }
 
