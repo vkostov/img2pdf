@@ -1,9 +1,10 @@
 package sdg
 
-import akka.actor.{Props, ActorSystem, Actor}
+import akka.actor.{PoisonPill, Props, ActorSystem, Actor}
 import akka.routing.RoundRobinRouter
 import java.io.File
 import common._
+import sdg.Reaper.WatchMe
 
 /**
  * Created by IntelliJ IDEA.
@@ -13,7 +14,7 @@ import common._
  */
 
 
-case class FileToProcess(file: java.io.File)
+case class ProcessDirectory(file: java.io.File)
 
 case class PdfCreated(fileName: String)
 
@@ -21,28 +22,15 @@ case class GeneratePdf(file: java.io.File)
 
 class DirWalker(system: ActorSystem) extends Actor {
 
-  def isEnvelopeDirectory(file: File): Boolean = file.isFile
-
   def createPdfForEnvelopeDirectory(file: File) = {
-    Thread.sleep(1000)    //simulate long running operation
+    //Thread.sleep(1000) //simulate long running operation
     file.getAbsolutePath
   }
 
   def receive = {
     case GeneratePdf(file) =>
-
-      if (isEnvelopeDirectory(file) || file.isFile) {
-        val pdfFileName = createPdfForEnvelopeDirectory(file)
-        system.eventStream.publish(PdfCreated(pdfFileName))
-      } else {
-        val children = file.listFiles()
-
-        if (children != null) {
-          for (child <- children) {
-            system.eventStream.publish(FileToProcess(child))
-          }
-        }
-      }
+      val pdfFileName = createPdfForEnvelopeDirectory(file)
+      system.eventStream.publish(PdfCreated(pdfFileName))
   }
 }
 
@@ -53,27 +41,59 @@ class ResultAggregator(system: ActorSystem) extends Actor {
   var filesPendingForProcess = 0L
 
   def receive = {
-    case FileToProcess(file) =>
-      filesPendingForProcess += 1
+    case ProcessDirectory(file) =>
+      if (Utils.isEnvelopeDirectory(file.getAbsolutePath) || file.isFile) {
+        filesPendingForProcess += 1
+        //println("Add to Queue: " + filesPendingForProcess)
+        system.eventStream.publish(GeneratePdf(file))
+      } else {
+        val children = file.listFiles()
 
-      println("Add to Queue: " + filesPendingForProcess)
-
-      system.eventStream.publish(GeneratePdf(file))
-
+        if (children != null) {
+          for (child <- children) {
+            system.eventStream.publish(ProcessDirectory(child))
+          }
+        }
+      }
     case PdfCreated(fileName) =>
       pdfFilesList = fileName :: pdfFilesList
       filesPendingForProcess -= 1
 
-      println("Remove from Queue: " + filesPendingForProcess)
+      //println("Remove from Queue: " + filesPendingForProcess)
 
-      if (filesPendingForProcess == 19) {
+      if (filesPendingForProcess == 0) {
         println("Number of PDFs created: " + pdfFilesList.size)
         println("Time taken (s): " + (System.nanoTime() - start) / 1.0e9)
+        println(pdfFilesList)
         system.shutdown()
       }
   }
 }
 
+object Utils {
+
+  /**
+   * Returns true if the directory contains images for a single envelope.
+   *
+   * The file path uses the following pattern:
+   * {basedir}/{file MGR}/{Scan Date}/{iBatch last 4}/{envelope id last 4}/{img file name}
+   *
+   * Example:
+   * /kidstar/caarc/images/ICD110A/20130424/0177/0017/8001.tif
+   * /kidstar/caarc/images/ICD110A/20130424/0177/0017/8002.tif
+   * /kidstar/caarc/images/ICD110A/20130424/0177/0017/8003.jpg
+   * /kidstar/caarc/images/ICD110A/20130424/0177/0017/8004.jpg
+   */
+  //
+  def isEnvelopeDirectory(fileName: String): Boolean = {
+    val regexString = """(.*).(\d\d\d\d\d\d\d\d).(\d\d\d\d).(\d\d\d\d)(.*)"""
+
+    //val dirPattern =
+    //  new scala.util.matching.Regex(regexString,"basePath, scanDate, batch, envelope")
+
+    fileName.matches(regexString)
+  }
+}
 
 object Images2PdfApp {
 
@@ -83,14 +103,12 @@ object Images2PdfApp {
     val system = ActorSystem("ImageConversionApp")
 
     val resultAggregator = system.actorOf(Props(new ResultAggregator(system)))
-    val dirWalkerRouter = system.actorOf(Props(new DirWalker(system)).withRouter(RoundRobinRouter(50)))
+    val dirWalkerRouter = system.actorOf(Props(new DirWalker(system)).withRouter(RoundRobinRouter(nrOfInstances = 15)))
 
     system.eventStream.subscribe(resultAggregator, classOf[PdfCreated])
-    system.eventStream.subscribe(resultAggregator, classOf[FileToProcess])
+    system.eventStream.subscribe(resultAggregator, classOf[ProcessDirectory])
     system.eventStream.subscribe(dirWalkerRouter, classOf[GeneratePdf])
 
-    resultAggregator ! FileToProcess(new File("/kidstar/caarc/images/ICD110A/20130424/0177"))
-
+    resultAggregator ! ProcessDirectory(new File("/kidstar/caarc/images/ICD110A"))
   }
-
 }
