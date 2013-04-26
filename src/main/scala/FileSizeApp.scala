@@ -5,6 +5,7 @@ import akka.event._
 import java.io.File
 
 
+
 /**
  * Created by IntelliJ IDEA.
  * User: vkostov
@@ -68,14 +69,13 @@ class SizeAgregator(system: ActorSystem) extends Actor {
       system.shutdown()
     }
   }
-
-
 }
 
 
 object FileSizeApp {
 
   def main(args: Array[String]): Unit = {
+    println("FileSizeApp started")
 
     val system = ActorSystem("FileSizeApp")
 
@@ -87,7 +87,7 @@ object FileSizeApp {
 
     system.eventStream.subscribe(dirWalkerRouter, classOf[CalculateSize])
 
-    sizeAggregator ! FileToProcess(new File("/Users/vkostov/projects"))
+    sizeAggregator ! FileToProcess(new File("/kidstar"))
 
   }
 
