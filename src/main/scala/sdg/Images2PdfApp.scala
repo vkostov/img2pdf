@@ -22,9 +22,11 @@ case class GeneratePdf(file: java.io.File)
 
 class DirWalker(system: ActorSystem) extends Actor {
 
-  def createPdfForEnvelopeDirectory(file: File) = {
+  def createPdfForEnvelopeDirectory(dir: File): String = {
     //Thread.sleep(1000) //simulate long running operation
-    file.getAbsolutePath
+    val generator = new PdfGenerator(dir, "/tmp/pdf", dir.getName + ".pdf")
+    val pdfFileName = generator.generate()
+    pdfFileName
   }
 
   def receive = {
@@ -103,7 +105,7 @@ object Images2PdfApp {
     val system = ActorSystem("ImageConversionApp")
 
     val resultAggregator = system.actorOf(Props(new ResultAggregator(system)))
-    val dirWalkerRouter = system.actorOf(Props(new DirWalker(system)).withRouter(RoundRobinRouter(nrOfInstances = 15)))
+    val dirWalkerRouter = system.actorOf(Props(new DirWalker(system)).withRouter(RoundRobinRouter(nrOfInstances = 1)))
 
     system.eventStream.subscribe(resultAggregator, classOf[PdfCreated])
     system.eventStream.subscribe(resultAggregator, classOf[ProcessDirectory])

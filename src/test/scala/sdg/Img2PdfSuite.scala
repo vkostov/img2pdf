@@ -35,11 +35,11 @@ class Img2PdfSuite extends FunSuite {
   }
 
   test("Generate PDF generation") {
-    val generator = new PdfGenerator(new File("/kidstar/images"), "/tmp", "test.pdf")
+    val generator = new PdfGenerator(new File("/kidstar/caarc/images/ICD110A/20130424/0177/"), "/tmp", "test.pdf")
 
     val pdfFileName = generator.generate()
 
-    assert(pdfFileName === "/tmp/test.pdf")
+    assert(pdfFileName === "/tmp" + File.separator + "test.pdf")
   }
 
 }
